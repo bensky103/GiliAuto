@@ -3,7 +3,7 @@
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Header
 
 from src.core.config import get_settings
 from src.core.logging import get_logger, setup_logging
@@ -65,30 +65,15 @@ async def root() -> dict[str, str]:
 
 
 @app.post("/admin/trigger-scheduler")
-async def trigger_scheduler(secret: str = "") -> dict[str, str]:
+async def trigger_scheduler(x_admin_secret: str = Header(None, alias="X-Admin-Secret")) -> dict[str, str]:
     """
     Manually trigger the scheduler to process pending follow-ups.
     
-    Requires the admin secret as a query parameter for security.
-    Usage: POST /admin/trigger-scheduler?secret=your-admin-secret
+    Requires X-Admin-Secret header for security.
+    Usage: POST /admin/trigger-scheduler with header X-Admin-Secret: <secret>
     """
-    if secret != settings.admin_secret:
+    if x_admin_secret != settings.admin_secret:
         return {"status": "error", "message": "Invalid secret"}
     
     await scheduler_service.process_pending_followups()
     return {"status": "triggered", "message": "Scheduler job executed"}
-
-
-@app.post("/admin/sync-monday")
-async def sync_monday(secret: str = "") -> dict[str, str]:
-    """
-    Manually trigger sync of new leads from Monday.com.
-    
-    Requires the admin secret as a query parameter for security.
-    Usage: POST /admin/sync-monday?secret=your-admin-secret
-    """
-    if secret != settings.admin_secret:
-        return {"status": "error", "message": "Invalid secret"}
-    
-    await scheduler_service.sync_new_leads_from_monday()
-    return {"status": "triggered", "message": "Monday sync job executed"}

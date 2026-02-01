@@ -205,11 +205,13 @@ class LeadService:
         Returns the lead if found and updated, None otherwise.
         """
         # Normalize phone number for lookup
+        # Meta sends without +, we store with +, so try both formats
         normalized = phone_number.lstrip("+")
+        phone_with_plus = f"+{normalized}"
 
         result = await session.execute(
             select(Lead).where(
-                Lead.phone_number.contains(normalized),
+                Lead.phone_number.in_([normalized, phone_with_plus, phone_number]),
                 Lead.is_done == False,  # noqa: E712
             )
         )
