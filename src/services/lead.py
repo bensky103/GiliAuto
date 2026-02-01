@@ -51,7 +51,11 @@ class LeadService:
         phone_column_id = phone_column_id or settings.monday_phone_column_id
         status_column_id = status_column_id or settings.monday_status_column_id
         
-        logger.info("processing_new_lead", monday_item_id=monday_item_id)
+        logger.info(
+            "processing_new_lead", 
+            monday_item_id=monday_item_id,
+            phone_column_id=phone_column_id,
+        )
 
         # Check if lead already exists
         existing = await session.execute(
