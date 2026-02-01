@@ -43,6 +43,7 @@ class Settings(BaseSettings):
     whatsapp_welcome_template: str = "hello_world"
     whatsapp_followup_template: str = "hello_world"
     whatsapp_template_language: str = "en_US"
+    use_whatsapp_templates: bool = False  # Set to True when templates are approved
 
 
 @lru_cache

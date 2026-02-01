@@ -19,8 +19,16 @@ from src.services.monday import (
 logger = get_logger(__name__)
 settings = get_settings()
 
-# Template names are configured in settings
-# These must match approved templates in Meta Business
+# Message templates - plain text messages
+# Note: For first outbound messages, WhatsApp requires approved templates.
+# Plain text only works within 24h after customer replies.
+WELCOME_MESSAGE = """שלום {name}! 👋
+תודה שפנית אלינו.
+נציג יחזור אליך בהקדם."""
+
+FOLLOWUP_MESSAGE = """שלום {name},
+שמנו לב שלא הספקת לחזור אלינו.
+האם תרצה שנתקשר אליך?"""
 
 
 class LeadService:
@@ -86,24 +94,28 @@ class LeadService:
         )
         session.add(lead)
 
-        # Send WhatsApp welcome message using template
+        # Send WhatsApp welcome message
         try:
-            # Build template components with name parameter
-            components = []
-            if name:
-                components = [
-                    {
-                        "type": "body",
-                        "parameters": [{"type": "text", "text": name}],
-                    }
-                ]
-            
-            await meta_service.send_template_message(
-                phone,
-                template_name=settings.whatsapp_welcome_template,
-                language_code=settings.whatsapp_template_language,
-                components=components if components else None,
-            )
+            if settings.use_whatsapp_templates:
+                # Use approved template
+                components = []
+                if name:
+                    components = [
+                        {
+                            "type": "body",
+                            "parameters": [{"type": "text", "text": name}],
+                        }
+                    ]
+                await meta_service.send_template_message(
+                    phone,
+                    template_name=settings.whatsapp_welcome_template,
+                    language_code=settings.whatsapp_template_language,
+                    components=components if components else None,
+                )
+            else:
+                # Use plain text (only works after customer has messaged first)
+                message = WELCOME_MESSAGE.format(name=name or "")
+                await meta_service.send_text_message(phone, message)
         except MetaAPIError as e:
             logger.error("failed_to_send_whatsapp", error=str(e))
             # Still save the lead but don't update Monday status
@@ -157,23 +169,28 @@ class LeadService:
             lead.is_done = True
             return False
 
-        # Send follow-up message using template
+        # Send follow-up message
         try:
-            components = []
-            if lead.lead_name:
-                components = [
-                    {
-                        "type": "body",
-                        "parameters": [{"type": "text", "text": lead.lead_name}],
-                    }
-                ]
-            
-            await meta_service.send_template_message(
-                lead.phone_number,
-                template_name=settings.whatsapp_followup_template,
-                language_code=settings.whatsapp_template_language,
-                components=components if components else None,
-            )
+            if settings.use_whatsapp_templates:
+                # Use approved template
+                components = []
+                if lead.lead_name:
+                    components = [
+                        {
+                            "type": "body",
+                            "parameters": [{"type": "text", "text": lead.lead_name}],
+                        }
+                    ]
+                await meta_service.send_template_message(
+                    lead.phone_number,
+                    template_name=settings.whatsapp_followup_template,
+                    language_code=settings.whatsapp_template_language,
+                    components=components if components else None,
+                )
+            else:
+                # Use plain text (only works within 24h window)
+                message = FOLLOWUP_MESSAGE.format(name=lead.lead_name)
+                await meta_service.send_text_message(lead.phone_number, message)
         except MetaAPIError as e:
             logger.error("failed_to_send_followup", error=str(e))
             raise
