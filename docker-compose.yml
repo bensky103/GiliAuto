@@ -1,0 +1,35 @@
+version: '3.8'
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: gili-auto
+    ports:
+      - "${PORT:-8000}:8000"
+    environment:
+      # Monday.com Configuration
+      - MONDAY_API_KEY=${MONDAY_API_KEY}
+      - MONDAY_BOARD_ID=${MONDAY_BOARD_ID}
+      # Meta WhatsApp API Configuration
+      - META_API_TOKEN=${META_API_TOKEN}
+      - META_PHONE_ID=${META_PHONE_ID}
+      # Database (use mounted volume path)
+      - DATABASE_URL=sqlite+aiosqlite:///./data/leads.db
+      # Admin
+      - ADMIN_SECRET=${ADMIN_SECRET:-change-me-in-production}
+      # App Settings
+      - ENVIRONMENT=${ENVIRONMENT:-development}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - PORT=8000
+    volumes:
+      # Persist SQLite database
+      - ./data:/app/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import httpx; httpx.get('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
