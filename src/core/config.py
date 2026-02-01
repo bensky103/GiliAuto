@@ -39,6 +39,11 @@ class Settings(BaseSettings):
     send_window_start_hour: int = 8
     send_window_end_hour: int = 21
 
+    # WhatsApp Template Names (must be approved in Meta Business)
+    whatsapp_welcome_template: str = "hello_world"
+    whatsapp_followup_template: str = "hello_world"
+    whatsapp_template_language: str = "en_US"
+
 
 @lru_cache
 def get_settings() -> Settings:
