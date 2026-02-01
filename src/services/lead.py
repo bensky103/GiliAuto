@@ -5,6 +5,7 @@ from datetime import datetime, timedelta
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.core.config import get_settings
 from src.core.exceptions import LeadNotFoundError, MetaAPIError, MondayAPIError
 from src.core.logging import get_logger
 from src.db.models import Lead
@@ -16,6 +17,7 @@ from src.services.monday import (
 )
 
 logger = get_logger(__name__)
+settings = get_settings()
 
 # Message templates (can be moved to config or database later)
 WELCOME_MESSAGE = """שלום {name}! 👋
@@ -34,8 +36,8 @@ class LeadService:
         self,
         session: AsyncSession,
         monday_item_id: str,
-        phone_column_id: str = "phone",
-        status_column_id: str = "status",
+        phone_column_id: str | None = None,
+        status_column_id: str | None = None,
     ) -> Lead:
         """
         Process a new lead from Monday.com webhook.
@@ -45,6 +47,10 @@ class LeadService:
         3. Send welcome WhatsApp message
         4. Update Monday status to "נשלחה הודעה"
         """
+        # Use config values if not provided
+        phone_column_id = phone_column_id or settings.monday_phone_column_id
+        status_column_id = status_column_id or settings.monday_status_column_id
+        
         logger.info("processing_new_lead", monday_item_id=monday_item_id)
 
         # Check if lead already exists

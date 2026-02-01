@@ -18,6 +18,8 @@ class Settings(BaseSettings):
     # Monday.com
     monday_api_key: str
     monday_board_id: str
+    monday_phone_column_id: str = "phone"
+    monday_status_column_id: str = "status"
 
     # Meta WhatsApp API
     meta_api_token: str
