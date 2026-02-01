@@ -62,3 +62,18 @@ async def health_check() -> dict[str, str]:
 async def root() -> dict[str, str]:
     """Root endpoint."""
     return {"message": "Lead Automation Service is running"}
+
+
+@app.post("/admin/trigger-scheduler")
+async def trigger_scheduler(secret: str = "") -> dict[str, str]:
+    """
+    Manually trigger the scheduler to process pending follow-ups.
+    
+    Requires the admin secret as a query parameter for security.
+    Usage: POST /admin/trigger-scheduler?secret=your-admin-secret
+    """
+    if secret != settings.admin_secret:
+        return {"status": "error", "message": "Invalid secret"}
+    
+    await scheduler_service.process_pending_followups()
+    return {"status": "triggered", "message": "Scheduler job executed"}
