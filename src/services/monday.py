@@ -18,6 +18,7 @@ STATUS_NEW_LEAD = "לייד חדש"
 STATUS_MESSAGE_SENT = "נשלחה הודעה"
 STATUS_NO_ANSWER_1 = "אין מענה 1"
 STATUS_NO_ANSWER_2 = "אין מענה 2"
+STATUS_CUSTOMER_REPLIED = "לקוח הגיב"
 STATUS_MEETING_SET = "נקבעה שיחת מכירה"
 
 

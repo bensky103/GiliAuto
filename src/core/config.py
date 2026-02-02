@@ -39,6 +39,10 @@ class Settings(BaseSettings):
     send_window_start_hour: int = 8
     send_window_end_hour: int = 21
 
+    # Message scheduling
+    initial_message_delay_minutes: int = 6  # Delay before sending first message
+    scheduler_interval_minutes: int = 1  # How often scheduler runs (1-2 min for accuracy)
+
     # WhatsApp Template Names (must be approved in Meta Business)
     whatsapp_welcome_template: str = "hello_world"
     whatsapp_followup_template: str = "hello_world"

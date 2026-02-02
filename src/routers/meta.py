@@ -7,7 +7,7 @@ from src.core.config import get_settings
 from src.core.logging import get_logger
 from src.db.session import get_session
 from src.services.lead import lead_service
-from src.services.monday import STATUS_MEETING_SET, monday_service
+from src.services.monday import STATUS_CUSTOMER_REPLIED, monday_service
 
 logger = get_logger(__name__)
 settings = get_settings()
@@ -87,11 +87,11 @@ async def meta_webhook(request: Request) -> JSONResponse:
                         )
 
                         if lead:
-                            # Update Monday status to indicate reply
+                            # Update Monday status to indicate customer replied
                             try:
                                 await monday_service.update_item_status(
                                     lead.monday_item_id,
-                                    STATUS_MEETING_SET,
+                                    STATUS_CUSTOMER_REPLIED,
                                 )
                                 logger.info(
                                     "monday_status_updated_on_reply",

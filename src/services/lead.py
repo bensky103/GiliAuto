@@ -45,9 +45,10 @@ class LeadService:
         Process a new lead from Monday.com webhook.
 
         1. Fetch lead details from Monday
-        2. Store in database
-        3. Send welcome WhatsApp message
-        4. Update Monday status to "נשלחה הודעה"
+        2. Store in database with first_message_due_at (delayed by configured minutes)
+        3. Scheduler will send the message when due
+        
+        Note: Message is NOT sent immediately - it's scheduled for later.
         """
         # Use config values if not provided
         phone_column_id = phone_column_id or settings.monday_phone_column_id
@@ -81,57 +82,113 @@ class LeadService:
             logger.error("no_phone_number", monday_item_id=monday_item_id)
             raise ValueError(f"No phone number found for item {monday_item_id}")
 
-        # Create lead in database
+        # Create lead in database with scheduled first message
         now = datetime.utcnow()
+        delay_minutes = settings.initial_message_delay_minutes
+        
         lead = Lead(
             monday_item_id=monday_item_id,
             phone_number=phone,
             lead_name=name or "Unknown",
             created_at=now,
-            status=STATUS_MESSAGE_SENT,
-            followup_due_at=now + timedelta(hours=24),
+            status="לייד חדש",  # New lead - message not sent yet
+            first_message_due_at=now + timedelta(minutes=delay_minutes),
+            first_message_sent=False,
+            followup_due_at=None,  # Will be set after first message is sent
             is_done=False,
         )
         session.add(lead)
+
+        logger.info(
+            "lead_scheduled_for_message",
+            lead_id=lead.id,
+            phone=phone,
+            message_due_at=lead.first_message_due_at,
+            delay_minutes=delay_minutes,
+        )
+        return lead
+
+    async def send_initial_message(
+        self,
+        session: AsyncSession,
+        lead: Lead,
+        status_column_id: str | None = None,
+    ) -> bool:
+        """
+        Send the initial welcome message for a lead (called by scheduler).
+
+        1. Send WhatsApp welcome message
+        2. Update Monday status to "נשלחה הודעה"
+        3. Set followup_due_at for 24h later
+
+        Returns True if message was sent, False otherwise.
+        """
+        status_column_id = status_column_id or settings.monday_status_column_id
+        
+        logger.info("sending_initial_message", lead_id=lead.id, phone=lead.phone_number)
 
         # Send WhatsApp welcome message
         try:
             if settings.use_whatsapp_templates:
                 # Use approved template
                 components = []
-                if name:
+                if lead.lead_name and lead.lead_name != "Unknown":
                     components = [
                         {
                             "type": "body",
-                            "parameters": [{"type": "text", "text": name}],
+                            "parameters": [{"type": "text", "text": lead.lead_name}],
                         }
                     ]
                 await meta_service.send_template_message(
-                    phone,
+                    lead.phone_number,
                     template_name=settings.whatsapp_welcome_template,
                     language_code=settings.whatsapp_template_language,
                     components=components if components else None,
                 )
             else:
                 # Use plain text (only works after customer has messaged first)
-                message = WELCOME_MESSAGE.format(name=name or "")
-                await meta_service.send_text_message(phone, message)
+                message = WELCOME_MESSAGE.format(name=lead.lead_name or "")
+                await meta_service.send_text_message(lead.phone_number, message)
         except MetaAPIError as e:
-            logger.error("failed_to_send_whatsapp", error=str(e))
-            # Still save the lead but don't update Monday status
+            logger.error("failed_to_send_initial_message", lead_id=lead.id, error=str(e))
             raise
+
+        # Mark first message as sent
+        now = datetime.utcnow()
+        lead.first_message_sent = True
+        lead.status = STATUS_MESSAGE_SENT
+        lead.followup_due_at = now + timedelta(hours=24)
 
         # Update Monday status
         try:
             await monday_service.update_item_status(
-                monday_item_id, STATUS_MESSAGE_SENT, status_column_id
+                lead.monday_item_id, STATUS_MESSAGE_SENT, status_column_id
             )
         except MondayAPIError as e:
             logger.error("failed_to_update_monday_status", error=str(e))
             # Message was sent, so continue despite Monday update failure
 
-        logger.info("lead_processed_successfully", lead_id=lead.id, phone=phone)
-        return lead
+        logger.info(
+            "initial_message_sent_successfully",
+            lead_id=lead.id,
+            phone=lead.phone_number,
+            followup_due_at=lead.followup_due_at,
+        )
+        return True
+
+    async def get_leads_pending_initial_message(
+        self, session: AsyncSession
+    ) -> list[Lead]:
+        """Get all leads that are due for initial message sending."""
+        now = datetime.utcnow()
+        result = await session.execute(
+            select(Lead).where(
+                Lead.first_message_sent == False,  # noqa: E712
+                Lead.first_message_due_at <= now,
+                Lead.is_done == False,  # noqa: E712
+            )
+        )
+        return list(result.scalars().all())
 
     async def process_followup(
         self,
@@ -245,11 +302,13 @@ class LeadService:
     async def get_leads_pending_followup(
         self, session: AsyncSession
     ) -> list[Lead]:
-        """Get all leads that are due for follow-up."""
+        """Get all leads that are due for follow-up (must have first message sent)."""
         now = datetime.utcnow()
         result = await session.execute(
             select(Lead).where(
                 Lead.is_done == False,  # noqa: E712
+                Lead.first_message_sent == True,  # noqa: E712
+                Lead.followup_due_at.isnot(None),
                 Lead.followup_due_at <= now,
             )
         )
